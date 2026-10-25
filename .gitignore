@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vercel/
+.openai/
+.sites-runtime/
+.env
+.env.*
+!.env.example
+deployment-target.json
+QA.md
+qa-gpu.*
+*.tar.gz
