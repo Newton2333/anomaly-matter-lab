@@ -7,7 +7,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export class CpuFluidSolver {
   constructor({ spacing=.064 }={}) {
     this.spacing=spacing; this.h=spacing*2; this.h2=this.h*this.h;
-    this.restDensity=5.9; this.center=[0,.89,0]; this.energy=0; this.charge=0;
+    this.restDensity=5.9; this.center=[0,.89,0]; this.energy=.42; this.charge=0;
     this.pointer=[0,.89,0]; this.pendingTime=0;
     const seedPositions=[]; const n=Math.ceil(.318/spacing);
     let seed=1234567; const rnd=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
@@ -29,7 +29,7 @@ export class CpuFluidSolver {
     this.reset();
   }
   reset(){
-    this.positions.set(this.initial);this.velocities.fill(0);this.energy=0;this.charge=0;this.time=0;this.pendingTime=0;
+    this.positions.set(this.initial);this.velocities.fill(0);this.energy=.42;this.charge=0;this.time=0;this.pendingTime=0;
     this.center[0]=0;this.center[1]=.89;this.center[2]=0;this.clearPointer();
     for(let i=0;i<this.count;i++){const k=i*3;this.velocities[k]=this.positions[k+2]*.45;this.velocities[k+2]=-this.positions[k]*.45;}
     this.predicted.set(this.positions);

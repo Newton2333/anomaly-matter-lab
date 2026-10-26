@@ -8,7 +8,7 @@ import { createHoldGesture } from './hold-gesture.js';
 const $=id=>document.getElementById(id);
 const root=$('experience');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let canvas=$('scene'),stage,engine,material='metal',energy=0,paused=reduced,orbit=false,immersive=false;
+let canvas=$('scene'),stage,engine,material='metal',energy=.42,paused=reduced,orbit=false,immersive=false;
 let charge=0,pointerId=null,ready=false,time=0;
 const hold=createHoldGesture();
 let toastTimer,toastKey=null,toastValues={},language=initialLanguage();
@@ -139,7 +139,7 @@ $('menu').addEventListener('click',()=>{const show=$('settings').hidden;$('setti
 function setImmersive(value){immersive=value;closeSettings();root.classList.toggle('focus-mode',immersive);$('exit-immersive').hidden=!immersive;document.querySelectorAll('.chrome').forEach(el=>el.inert=immersive);if(immersive)canvas.focus({preventScroll:true});else $('immersive').focus({preventScroll:true});}
 $('immersive').addEventListener('click',()=>setImmersive(true));$('exit-immersive').addEventListener('click',()=>setImmersive(false));
 $('fullscreen').addEventListener('click',async()=>{closeSettings();try{if(document.fullscreenElement)await document.exitFullscreen();else if(root.requestFullscreen)await root.requestFullscreen();else setImmersive(true);}catch{setImmersive(true);}});
-function reset(){if(!ready)return;cancelGesture();engine.reset();stage.reset();orbit=false;energy=0;paused=reduced;material='metal';applyState();updateLabels();$('energy').value=0;$('energy').style.backgroundImage='linear-gradient(90deg,var(--accent) 0%,#404850 0%)';$('energy-value').textContent='0%';$('orbit').querySelector('.setting-state').textContent=t('off');updatePauseLabel();requestRender();toast('resetDone');}
+function reset(){if(!ready)return;cancelGesture();engine.reset();stage.reset();orbit=false;energy=.42;paused=reduced;material='metal';applyState();updateLabels();$('energy').value=42;$('energy').style.backgroundImage='linear-gradient(90deg,var(--accent) 42%,#404850 42%)';$('energy-value').textContent='42%';$('orbit').querySelector('.setting-state').textContent=t('off');updatePauseLabel();requestRender();toast('resetDone');}
 $('reset').addEventListener('click',reset);
 async function capture(){if(!ready)return;const snapshotMaterial=material;$('capture').disabled=true;closeSettings();try{if(engine.kind==='webgpu'&&engine.renderer.renderAsync)await engine.renderer.renderAsync(stage.scene,stage.camera);else engine.renderer.render(stage.scene,stage.camera);engine.afterRender?.();const shot=document.createElement('canvas');shot.width=canvas.width;shot.height=canvas.height;const ctx=shot.getContext('2d');ctx.drawImage(canvas,0,0);const size=Math.max(16,shot.width*.021);ctx.fillStyle='#e9e5dc';ctx.font=`${size}px Arial`;ctx.fillText('ANOMALY',shot.width*.05,shot.height*.08);const blob=await new Promise(r=>shot.toBlob(r,'image/png'));if(!blob)throw Error('Snapshot unavailable');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ANOMALY-${snapshotMaterial}-${Date.now()}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('captured');}catch{toast('captureFailed');}finally{$('capture').disabled=false;}}
 $('capture').addEventListener('click',capture);

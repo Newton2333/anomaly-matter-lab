@@ -6,7 +6,7 @@ const engine={
   renderer:{async compileAsync(s,c){assert.equal(s,scene);assert.equal(c,camera);calls.push(['compile',mode]);},
     render(s,c){assert.equal(s,scene);assert.equal(c,camera);calls.push(['render',mode]);fenced=false;}},
   setPaused(value){calls.push(['pause',value]);},reset(){calls.push(['reset']);mode='metal';},
-  setEnergy(value){assert.equal(value,0);},setMaterial(value){mode=value;},
+  setEnergy(value){assert.equal(value,.42);},setMaterial(value){mode=value;},
   burst(){calls.push(['burst',mode]);},async step(dt){assert.ok(fenced);assert.equal(dt,1/60);calls.push(['step',mode]);},
   afterRender(){calls.push(['submit',mode]);},async waitForIdle(){fenced=true;calls.push(['fence',mode]);}
 };

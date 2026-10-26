@@ -23,7 +23,7 @@ function advance(fluid,duration,dt=1/60,beforeStep=()=>{}){
 const results=[];
 for(const spacing of [.064,.09])for(const energy of [0,1])for(const dt of [1/60,1/15]){
   const fluid=new CpuFluidSolver({spacing});
-  assert.equal(fluid.energy,0,'default energy is zero');
+  assert.equal(fluid.energy,.42,'default energy is 42%');
   assert.equal(fluid.count,spacing===.064?485:179,'particle quality is unchanged');
   fluid.energy=energy;
   // One pointer event must remain effective throughout a stationary long hold.
@@ -48,7 +48,7 @@ for(const spacing of [.064,.09])for(const energy of [0,1])for(const dt of [1/60,
   assert.ok(released.radius>held.radius*2.5,'explicit release remains visibly expansive');
   results.push({particles:fluid.count,energy,inputHz:Math.round(1/dt),holdMin:+minRadius.toFixed(4),
     holdMax:+maxRadius.toFixed(4),peakHoldSpeed:+maxSpeed.toFixed(4),releaseRatio:+(released.radius/held.radius).toFixed(2)});
-  fluid.reset();assert.equal(fluid.energy,0);assert.equal(fluid.charge,0);
+  fluid.reset();assert.equal(fluid.energy,.42);assert.equal(fluid.charge,0);
   assert.deepEqual(fluid.center,[0,.89,0]);assert.deepEqual(fluid.pointer,[0,.89,0]);
 }
 
@@ -94,7 +94,7 @@ try{
   right.setFromMatrixColumn(camera.matrixWorld,0);
   assert.ok(new THREE.Vector3(...mapped).sub(new THREE.Vector3(0,.89,0)).dot(right)>.35,'mapping follows camera orbit');
   engine.setPaused(true);engine.setEnergy(1);engine.step(1);assert.equal(lastStats.energy,1);
-  engine.reset();engine.step(1);assert.equal(lastStats.energy,0,'engine reset energy is zero');
+  engine.reset();engine.step(1);assert.equal(lastStats.energy,.42,'engine reset energy is 42%');
   assert.equal(engine.mesh.resolution,48,'surface resolution is unchanged');
 }finally{CpuFluidSolver.prototype.setPointer=originalPointer;engine.destroy();}
 

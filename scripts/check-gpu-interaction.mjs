@@ -40,7 +40,7 @@ harness.api.setPointer(1,-1);assert.equal(harness.state().pointerX,1);
 harness.api.setPointer(0,0);assert.equal(harness.state().pointerX,0);
 harness.api.setPointer(-.6,.8);harness.api.clearPointer();
 assert.equal(harness.state().pointerX,0);assert.equal(harness.state().pointerY,0);
-harness.api.reset();assert.equal(harness.state().energy,0);assert.equal(harness.state().charge,0);
+harness.api.reset();assert.equal(harness.state().energy,.42);assert.equal(harness.state().charge,0);
 assert.equal(harness.state().burstPending,0);assert.equal(harness.state().resetPending,true);
 
 // Check the held-force integrator over all supported frame steps, including an

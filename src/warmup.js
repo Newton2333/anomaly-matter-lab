@@ -1,6 +1,6 @@
 // Exercise the actual materials and first burst while the loading cover is up.
 // There is no artificial wait: each increment represents completed render work.
-export async function warmupExperience(engine,{scene=engine.scene,camera=engine.camera,beforeRender,onProgress=()=>{},energy=0,
+export async function warmupExperience(engine,{scene=engine.scene,camera=engine.camera,beforeRender,onProgress=()=>{},energy=.42,
   yieldFrame=()=>new Promise(resolve=>setTimeout(resolve,0))}={}) {
   if(engine.warmup){await engine.warmup({beforeRender,onProgress});return;}
   const modes=['metal','glass','plasma'];

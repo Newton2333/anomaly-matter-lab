@@ -1,6 +1,6 @@
 /// <reference types="@webgpu/types" />
 /**
- * ANOMALY — genuine GPU particle-fluid implementation.
+ * ANOMALY — GPU fluid renderer.
  * PBF solver and reconstructed liquid surface: Daniel Greenheck, MIT.
  * See vendor/particle-fluids/LICENSE and THIRD_PARTY_NOTICES.md.
  */
@@ -164,7 +164,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   })().compute(count);
 
   let material: MaterialName = 'metal';
-  let energy = 0, charge = 0, paused = false, destroyed = false, resetPending = false;
+  let energy = .42, charge = 0, paused = false, destroyed = false, resetPending = false;
   let burstPending = 0, time = 0, reportTime = 0, dirty = true;
   let pointerX = 0, pointerY = 0;
   let lostError: Error | undefined;
@@ -304,7 +304,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
       burstPending = clamp(strength, 0.15, 1); charge = 0; paused = false; applyPhysics();
     },
     setPaused(value: boolean) { paused = !!value; resetTimingWindow(); },
-    reset() { resetPending = true; burstPending = 0; charge = 0; energy = 0; pointerX = pointerY = 0;
+    reset() { resetPending = true; burstPending = 0; charge = 0; energy = .42; pointerX = pointerY = 0;
       time = reportTime = 0; timeUniform.value = 0; attractor.value.copy(CENTER); applyPhysics();
       resetTimingWindow(); dirty = true; },
     async getParticles() {
