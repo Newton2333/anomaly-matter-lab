@@ -17,6 +17,7 @@ if(handheld){
   function apply(){
     document.documentElement.lang=language==='en'?'en':'zh-CN';
     document.title=translate(language,'pageTitle');
+    document.querySelector('meta[name="description"]').content=translate(language,'metaDescription');
     document.querySelectorAll('[data-mobile-i18n]').forEach(el=>el.textContent=translate(language,el.dataset.mobileI18n));
     button.textContent=language==='en'?'中':'EN';button.setAttribute('aria-label',translate(language,'languageLabel'));
     link.setAttribute('aria-label',translate(language,'desktopLink'));
