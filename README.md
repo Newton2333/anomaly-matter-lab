@@ -1,12 +1,12 @@
 # ANOMALY
 
-A browser-based fluid experiment by **Newton Quan**.
+A small experiment in fluid, light and motion by **Newton Quan**.
 
 [Live demo](https://anomaly-matter-lab.vercel.app) · Desktop browser · English / 中文
 
-Three visual styles: mercury, glass and stardust. Move the pointer to attract, hold to gather, release to scatter.
+Pull a little, hold to gather, then let go. Switch between mercury, glass and stardust, adjust the activity, or pause to save a frame.
 
-流体交互实验，支持水银、玻璃和星尘三种效果。移动鼠标牵引，长按聚合，松手散开。
+一个可以随手玩的流体小实验。水银流动、玻璃折光、星尘聚散：移动鼠标牵引，长按聚拢，松手让它散开。也可以调整活跃程度，或暂停留下一张截图。
 
 ## Run locally
 
