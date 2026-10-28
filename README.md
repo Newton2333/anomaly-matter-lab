@@ -10,6 +10,8 @@ Pull a little, hold to gather, then let go. Switch between mercury, glass and st
 
 ## Run locally
 
+Use Node.js 24 for development and checks.
+
 ```sh
 npm ci
 npm run dev

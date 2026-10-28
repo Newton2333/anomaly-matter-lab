@@ -2,6 +2,14 @@
 // Simulation resolution is deliberately independent of this rendering budget.
 export const MIN_GPU_QUALITY = .45;
 
+// Image quality can only reduce shading cost, not the particle solver. Keep a
+// useful render budget on compute-bound devices rather than degrading forever.
+export function calibrationPressure(computeMs, renderMs) {
+  if(!Number.isFinite(computeMs)||computeMs<0||!Number.isFinite(renderMs)||renderMs<=0)return 0;
+  const renderBudget=Math.max(8,16.7-computeMs);
+  return renderMs*16.7/renderBudget;
+}
+
 export function framePercentile(samples, fraction=.75) {
   const sorted=samples.filter(value=>Number.isFinite(value)&&value>0).sort((a,b)=>a-b);
   return sorted.length?sorted[Math.ceil((sorted.length-1)*fraction)]:0;

@@ -12,6 +12,32 @@ const encode=v=>toneMap[Math.max(0,Math.min(65535,(v*8192)|0))];
 const MATCAP_SIZE=256;
 let reflectionMap;
 
+// Filter the final image, not individual triangles. Alpha coverage per triangle
+// would leave seams where adjacent fluid faces share the same silhouette pixel.
+// This short directional filter touches contrast edges only; depth stays intact.
+export function smoothRasterEdges(source,target,depth,width,height){
+  target.set(source);
+  const stride=width*4;
+  const luma=i=>source[i]*.299+source[i+1]*.587+source[i+2]*.114;
+  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
+    const pixel=y*width+x;
+    // Only silhouettes need this fallback pass. Interior highlights keep their
+    // original contrast, and the smooth backdrop does not need colour samples.
+    const occupied=depth[pixel]!==Infinity;
+    if((depth[pixel-width]!==Infinity)===occupied&&(depth[pixel+width]!==Infinity)===occupied&&
+      (depth[pixel-1]!==Infinity)===occupied&&(depth[pixel+1]!==Infinity)===occupied)continue;
+    const i=pixel*4,n=luma(i-stride),s=luma(i+stride),w=luma(i-4),e=luma(i+4),c=luma(i);
+    const low=Math.min(c,n,s,w,e),high=Math.max(c,n,s,w,e);
+    if(high-low<Math.max(12,high*.125))continue;
+    // Smooth along an edge, not across it. Straight edges and flat interiors
+    // remain exact; the little steps where an edge changes rows get coverage.
+    const step=Math.abs(n+s-2*c)<Math.abs(w+e-2*c)?stride:4;
+    for(let channel=0;channel<3;channel++)target[i+channel]=source[i+channel]*.5+
+      (source[i-step+channel]+source[i+step+channel])*.25;
+  }
+  return target;
+}
+
 function createReflectionMap(){
   if(reflectionMap)return reflectionMap;
   const a=new Float32Array(MATCAP_SIZE*MATCAP_SIZE*4);
@@ -57,12 +83,14 @@ export class SoftwareRenderer {
   getSize(target){return target.set(this.width,this.height);}
   setSize(w,h,updateStyle=true){
     this.width=Math.max(1,Math.round(w));this.height=Math.max(1,Math.round(h));
+    // Keep software work bounded even on 4K displays. The final silhouette
+    // filter smooths the sampling steps without multiplying the shading cost.
     const scale=Math.min(1,760/this.width,620/this.height,Math.sqrt(310000/(this.width*this.height)));
     this.rw=Math.max(1,Math.round(this.width*scale));this.rh=Math.max(1,Math.round(this.height*scale));
     this.domElement.width=this.width;this.domElement.height=this.height;
     if(updateStyle){this.domElement.style.width=`${this.width}px`;this.domElement.style.height=`${this.height}px`;}
     this.surface.width=this.rw;this.surface.height=this.rh;
-    this.image=this.surfaceContext.createImageData(this.rw,this.rh);this.depth=new Float32Array(this.rw*this.rh);
+    this.image=this.surfaceContext.createImageData(this.rw,this.rh);this.filteredImage=this.surfaceContext.createImageData(this.rw,this.rh);this.depth=new Float32Array(this.rw*this.rh);
     this.backgroundKey='';
   }
   _background(scene){
@@ -223,11 +251,12 @@ export class SoftwareRenderer {
       }else this._mesh(o,o.matrixWorld,camera);
     };
     opaque.forEach(draw);transparent.forEach(draw);points.forEach(o=>this._points(o,camera));
-    this.surfaceContext.putImageData(this.image,0,0);
+    smoothRasterEdges(this.image.data,this.filteredImage.data,this.depth,this.rw,this.rh);
+    this.surfaceContext.putImageData(this.filteredImage,0,0);
     this.context.imageSmoothingEnabled=true;this.context.imageSmoothingQuality='high';
     this.context.drawImage(this.surface,0,0,this.width,this.height);
   }
   clear(){this.context.clearRect(0,0,this.width,this.height);}
-  dispose(){this.disposed=true;this.image=null;this.depth=null;this.background=null;this.vertexCache=new WeakMap();}
+  dispose(){this.disposed=true;this.image=null;this.filteredImage=null;this.depth=null;this.background=null;this.vertexCache=new WeakMap();}
   forceContextLoss(){}
 }

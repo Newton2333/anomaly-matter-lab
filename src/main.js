@@ -71,10 +71,12 @@ async function initialize(){
       engine.reset();applyState();
       await engine.step(0);
       stage.update(0,{material,charge:0,dt:0});
-      if(mode==='webgpu'&&engine.renderer.renderAsync)await engine.renderer.renderAsync(stage.scene,stage.camera);
+      if(engine.render)engine.render();
+      else if(mode==='webgpu'&&engine.renderer.renderAsync)await engine.renderer.renderAsync(stage.scene,stage.camera);
       else engine.renderer.render(stage.scene,stage.camera);
       engine.afterRender?.();
       await engine.waitForIdle?.();
+      await engine.verifyFrame?.();
       loadingProgress('ready',1);
       root.dataset.renderer=mode;
       updateRendererNote();
@@ -103,7 +105,7 @@ async function frame(now,dt){
   if(hold.active){charge=hold.value();engine.setCharge(charge);$('charge-number').textContent=Math.round(charge*100);$('charge-cursor').querySelector('circle').style.strokeDashoffset=220*(1-charge);updateChargePrompt();}
   await engine.step(dt);
   stage.update(time,{charge,material,dt:paused?0:dt});
-  engine.renderer.render(stage.scene,stage.camera);
+  if(engine.render)engine.render();else engine.renderer.render(stage.scene,stage.camera);
   engine.afterRender?.();
 }
 function selectMaterial(next){if(!ready)return;cancelGesture();material=next;engine.setMaterial(next);updateLabels();requestRender();}
@@ -141,7 +143,7 @@ $('immersive').addEventListener('click',()=>setImmersive(true));$('exit-immersiv
 $('fullscreen').addEventListener('click',async()=>{closeSettings();try{if(document.fullscreenElement)await document.exitFullscreen();else if(root.requestFullscreen)await root.requestFullscreen();else setImmersive(true);}catch{setImmersive(true);}});
 function reset(){if(!ready)return;cancelGesture();engine.reset();stage.reset();orbit=false;energy=.42;paused=reduced;material='metal';applyState();updateLabels();$('energy').value=42;$('energy').style.backgroundImage='linear-gradient(90deg,var(--accent) 42%,#404850 42%)';$('energy-value').textContent='42%';$('orbit').querySelector('.setting-state').textContent=t('off');updatePauseLabel();requestRender();toast('resetDone');}
 $('reset').addEventListener('click',reset);
-async function capture(){if(!ready)return;const snapshotMaterial=material;$('capture').disabled=true;closeSettings();try{if(engine.kind==='webgpu'&&engine.renderer.renderAsync)await engine.renderer.renderAsync(stage.scene,stage.camera);else engine.renderer.render(stage.scene,stage.camera);engine.afterRender?.();const shot=document.createElement('canvas');shot.width=canvas.width;shot.height=canvas.height;const ctx=shot.getContext('2d');ctx.drawImage(canvas,0,0);const size=Math.max(16,shot.width*.021);ctx.fillStyle='#e9e5dc';ctx.font=`${size}px Arial`;ctx.fillText('ANOMALY',shot.width*.05,shot.height*.08);const blob=await new Promise(r=>shot.toBlob(r,'image/png'));if(!blob)throw Error('Snapshot unavailable');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ANOMALY-${snapshotMaterial}-${Date.now()}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('captured');}catch{toast('captureFailed');}finally{$('capture').disabled=false;}}
+async function capture(){if(!ready)return;const snapshotMaterial=material;$('capture').disabled=true;closeSettings();try{if(engine.render)engine.render();else if(engine.kind==='webgpu'&&engine.renderer.renderAsync)await engine.renderer.renderAsync(stage.scene,stage.camera);else engine.renderer.render(stage.scene,stage.camera);engine.afterRender?.();const shot=document.createElement('canvas');shot.width=canvas.width;shot.height=canvas.height;const ctx=shot.getContext('2d');ctx.drawImage(canvas,0,0);const size=Math.max(16,shot.width*.021);ctx.fillStyle='#e9e5dc';ctx.font=`${size}px Arial`;ctx.fillText('ANOMALY',shot.width*.05,shot.height*.08);const blob=await new Promise(r=>shot.toBlob(r,'image/png'));if(!blob)throw Error('Snapshot unavailable');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`ANOMALY-${snapshotMaterial}-${Date.now()}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('captured');}catch{toast('captureFailed');}finally{$('capture').disabled=false;}}
 $('capture').addEventListener('click',capture);
 $('about-open').addEventListener('click',()=>{closeSettings();$('about').showModal();});$('about-close').addEventListener('click',()=>$('about').close());$('reload').addEventListener('click',()=>location.reload());
 document.addEventListener('keydown',e=>{if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||$('about').open)return;if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;const key=e.key.toLowerCase();if(e.code==='Space'&&!['BUTTON','A'].includes(e.target.tagName)){e.preventDefault();$('charge-cursor').style.left='58%';$('charge-cursor').style.top='48%';startCharge('keyboard');}else if(key==='1')selectMaterial('metal');else if(key==='2')selectMaterial('glass');else if(key==='3')selectMaterial('plasma');else if(key==='h')setImmersive(!immersive);else if(key==='escape'){if(immersive)setImmersive(false);closeSettings();}else if(key==='r')reset();else if(key==='p')togglePause();});

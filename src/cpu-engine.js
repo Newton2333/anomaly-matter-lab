@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
+import { stagePixelRatio } from './render-resolution.js';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
@@ -148,7 +149,7 @@ export class CpuFluidSolver {
 export async function createCpuEngine({canvas,scene,camera,onStats,renderer:providedRenderer}={}) {
   const renderer=providedRenderer||new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
   const software=!!renderer.isSoftwareRenderer;
-  if(!software){renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio||1,1.6));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;}
+  if(!software){renderer.setPixelRatio(stagePixelRatio(1,1,globalThis.devicePixelRatio));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;}
   const fluid=new CpuFluidSolver({spacing:software?.09:.064});
   const materialMetal=new THREE.MeshStandardMaterial({color:0xcbd2d5,metalness:1,roughness:.105,envMapIntensity:1.55});
   const materialGlass=new THREE.MeshPhysicalMaterial({color:0xafd9e0,metalness:0,roughness:.055,transmission:.94,thickness:.32,ior:1.46,clearcoat:1,clearcoatRoughness:.04,attenuationColor:0x75b5c5,attenuationDistance:1.2,envMapIntensity:1.5});
@@ -238,10 +239,9 @@ export async function createCpuEngine({canvas,scene,camera,onStats,renderer:prov
     reset(){fluid.reset();material='metal';mesh.material=materialMetal;mesh.visible=true;points.visible=false;dirty=false;updateSurface();},
     step(dt){if(!paused){fluid.step(dt);dirty=true;}if(dirty){updateSurface();dirty=false;}elapsed+=dt;frames++;if(elapsed>.75){onStats?.({fps:Math.round(frames/elapsed),particles:fluid.count,backend:software?'Software 3D':'WebGL2',material,energy:fluid.energy});frames=0;elapsed=0;}},
     resize(w,h){
-      // Large/retina windows must not multiply the translucent scene into tens
-      // of millions of pixels. Match the GPU path's 2.4M physical pixel budget;
-      // only the 3D canvas is scaled, while DOM text stays at native resolution.
-      if(!software){const nativeRatio=Math.min(globalThis.devicePixelRatio||1,1.6),pixelRatio=Math.min(nativeRatio,Math.sqrt(2400000/(Math.max(1,w)*Math.max(1,h))));renderer.setPixelRatio(pixelRatio);}
+      // Budget retina supersampling, not the base scene. Rendering below one
+      // pixel per CSS pixel makes the ring and liquid outlines visibly blocky.
+      if(!software)renderer.setPixelRatio(stagePixelRatio(w,h,globalThis.devicePixelRatio,{pixelBudget:2_400_000}));
       renderer.setSize(w,h,false);
     },
     getParticles(){return new Float32Array(fluid.positions);},

@@ -15,7 +15,9 @@ import {
   PrimitiveSet, SimLoop, type ParticleInit,
 } from './vendor/particle-fluids/src/index.js';
 
-import { framePercentile, nextGpuProfile, gpuProfileChanged } from './gpu-quality.js';
+import { framePercentile, nextGpuProfile, gpuProfileChanged, calibrationPressure } from './gpu-quality.js';
+import { stagePixelRatio } from './render-resolution.js';
+import { GpuCompositor } from './gpu-compositor';
 
 type MaterialName = 'metal' | 'glass' | 'plasma';
 interface WarmupOptions {
@@ -65,7 +67,9 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   const { canvas, scene, camera } = options;
   if (!navigator.gpu) throw new Error('WebGPU is unavailable.');
   const renderer = await createParticleRenderer({ canvas, antialias: true, alpha: false });
+  let compositor: GpuCompositor | undefined;
   try {
+  compositor = new GpuCompositor({ renderer, scene, camera });
   const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
   const targetCount = options.particleCount ?? (mobile ? 3200 : 6500);
   const radius = fitRadius(targetCount);
@@ -92,6 +96,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   }));
   const surface = new FluidSurfaceRenderer(fluid, {
     renderer, scene, camera,
+    externalScene: { color: compositor.stageColor, depth: compositor.stageDepth },
     bounds: new Box3(new Vector3(-0.92, -0.02, -0.92), new Vector3(0.92, 1.87, 0.92)),
     colliders: [colliders], motionStretch: 0.012,
     appearance: { metalness: 1, metalColor: 0xd7e0e3, roughness: 0.065, envIntensity: 1.35,
@@ -99,6 +104,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   });
   surface.mesh.name = 'ANOMALY — solved liquid surface';
   scene.add(surface.mesh);
+  compositor.setSurface(surface.mesh);
 
   // Both star cores and soft halos follow the SAME solved GPU particle buffer.
   const starGeometry = new SphereGeometry(radius * 0.30, 5, 3);
@@ -170,9 +176,8 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   let lostError: Error | undefined;
   let warming = false;
   let warmupPromise: Promise<void> | undefined;
-  // Liquid rays are much more expensive than the particle view. Bound their
-  // physical pixel count rather than multiplying a large/retina monitor by DPR.
-  // This affects only the 3D canvas: DOM typography and controls stay native-res.
+  // Expensive liquid rays have their own budget. The ring and scene keep a
+  // CSS-native antialiased target even when liquid shading scales down.
   const pixelBudget = mobile ? 1_300_000 : 2_400_000;
   const profiles = {
     metal: { quality: 1, reflections: true, canReflect: true },
@@ -181,7 +186,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   };
   let viewportWidth = Math.max(1, canvas.clientWidth || innerWidth);
   let viewportHeight = Math.max(1, canvas.clientHeight || innerHeight);
-  let appliedPixelRatio = 0, resolutionDirty = true;
+  let appliedPixelRatio = 0, liquidPixelRatio = 0, resolutionDirty = true;
   let qualityChangedAt = performance.now(), frameLatencyMs = 0;
   let lastSubmittedAt = 0;
   const completedFrames: number[] = [];
@@ -189,8 +194,8 @@ export async function createGpuEngine(options: GpuEngineOptions) {
 
   function applyResolution() {
     const nativeRatio = Math.min(window.devicePixelRatio || 1, 1.6);
-    const modeBudget = material === 'plasma' ? pixelBudget * 4 / 3 : pixelBudget;
-    const ratio = Math.min(nativeRatio, Math.sqrt(modeBudget / (viewportWidth * viewportHeight))) *
+    const ratio = stagePixelRatio(viewportWidth, viewportHeight, window.devicePixelRatio || 1);
+    liquidPixelRatio = Math.min(nativeRatio, Math.sqrt(pixelBudget / (viewportWidth * viewportHeight))) *
       profiles[material].quality;
     surface.reflections = profiles[material].reflections;
     if (Math.abs(ratio - appliedPixelRatio) > 0.005) {
@@ -198,6 +203,10 @@ export async function createGpuEngine(options: GpuEngineOptions) {
       appliedPixelRatio = ratio;
     }
     renderer.setSize(viewportWidth, viewportHeight, false);
+    compositor!.resize(Math.max(1, Math.floor(viewportWidth * ratio)),
+      Math.max(1, Math.floor(viewportHeight * ratio)),
+      Math.max(1, Math.floor(viewportWidth * liquidPixelRatio)),
+      Math.max(1, Math.floor(viewportHeight * liquidPixelRatio)));
     resolutionDirty = false;
   }
 
@@ -210,6 +219,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
 
   function observeCompletedFrame(mode: MaterialName, submittedAt: number, gap: number) {
     if (destroyed || warming || paused || document.hidden || material !== mode) return;
+    if (mode === 'plasma') return; // Stars use the native scene pass, not liquid rays.
     const now = performance.now();
     // Exclude tab suspension, first frame/shader compilation and mode switches.
     if (gap <= 0 || gap > 1500 || now - qualityChangedAt < 1200) return;
@@ -266,6 +276,14 @@ export async function createGpuEngine(options: GpuEngineOptions) {
 
   const api = {
     kind: 'webgpu' as const, renderer, scene, camera, particleCount: count,
+    render() { compositor!.render(); },
+    async verifyFrame() {
+      // The first settled drop is centered here. Verify its covered draw before
+      // exposing the page; a driver/buffer failure takes the existing fallback.
+      camera.updateMatrixWorld();
+      const point = CENTER.clone().project(camera);
+      await compositor!.validateSurface(point.x * .5 + .5, .5 - point.y * .5);
+    },
     waitForIdle,
     warmup(options: WarmupOptions = {}) {
       // A second caller joins the same preparation instead of running another
@@ -378,13 +396,14 @@ export async function createGpuEngine(options: GpuEngineOptions) {
         options.onStats?.({ kind: 'webgpu', particles: count, stepMs: performance.now() - started,
           substeps: loop.substeps, material, pixelRatio: appliedPixelRatio,
           renderPixels: Math.round(viewportWidth * viewportHeight * appliedPixelRatio ** 2),
+          liquidPixels: Math.round(viewportWidth * viewportHeight * liquidPixelRatio ** 2),
           gpuQueueLatencyMs: frameLatencyMs, quality: profiles[material].quality,
           screenSpaceReflections: profiles[material].reflections }); }
     },
     destroy() {
       if (destroyed) return; destroyed = true;
       scene.remove(surface.mesh, stars, halos);
-      surface.dispose(); loop.dispose(); colliders.dispose(); particles.dispose();
+      surface.dispose(); compositor!.dispose(); loop.dispose(); colliders.dispose(); particles.dispose();
       starGeometry.dispose(); starMaterial.dispose(); haloGeometry.dispose(); haloMaterial.dispose();
       force.dispose(); burstKernel.dispose(); renderer.dispose();
     },
@@ -435,16 +454,22 @@ export async function createGpuEngine(options: GpuEngineOptions) {
           const started = performance.now(), sampleEpoch = visibilityEpoch;
           beforeRender?.(mode);
           await api.step(1 / 60);
-          renderer.render(scene, camera);
+          // Startup can afford a fence here. It separates solver/reconstruction
+          // time from shading so a compute bottleneck does not blur the image.
           await waitForIdle();
-          const duration = performance.now() - started;
+          const drawStarted = performance.now();
+          api.render();
+          await waitForIdle();
+          const ended = performance.now();
+          const duration = ended - started;
+          const pressure = calibrationPressure(drawStarted - started, ended - drawStarted);
           // A hidden tab can suspend GPU work or timer delivery. Exclude the
           // entire transition even when the tab became visible before the fence.
           const valid = !document.hidden && visibilityEpoch === sampleEpoch;
           if (valid) preparationTime += duration;
           if (preparationTime > 90000) throw new Error('GPU preparation exceeded its time budget.');
           report();
-          return valid ? duration : 0;
+          return valid ? pressure : 0;
         };
         api.reset(); api.setMaterial(mode); api.setEnergy(savedEnergy); api.setPaused(false);
         await visible();
@@ -466,7 +491,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
         let frameMs = Math.max(framePercentile(compact, .5), framePercentile(scattered, .5));
         // At most three adjustments: omit SSR, tune pixels, then verify/tune
         // once more. Every selected profile is sampled after its resize work.
-        for (let adjustment = 0; adjustment < 3; adjustment++) {
+        for (let adjustment = 0; mode !== 'plasma' && adjustment < 3; adjustment++) {
           const next = nextGpuProfile(profiles[mode], frameMs);
           if (!gpuProfileChanged(profiles[mode], next)) break;
           profiles[mode] = next; resolutionDirty = true;
@@ -476,7 +501,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
           frameMs = framePercentile(samples, .5);
         }
         options.onStats?.({ kind: 'webgpu', preparation: true, material: mode,
-          measuredFrameMs: frameMs, quality: profiles[mode].quality,
+          calibrationPressureMs: frameMs, quality: profiles[mode].quality,
           screenSpaceReflections: profiles[mode].reflections });
         onProgress?.(mode, Math.min(.98, (index + 1) / modes.length));
       }
@@ -500,7 +525,7 @@ export async function createGpuEngine(options: GpuEngineOptions) {
   } catch (error) {
     // Initialization failures must not keep a second GPU device alive while
     // the caller falls back to another rendering backend.
-    renderer.dispose();
+    compositor?.dispose(); renderer.dispose();
     throw error;
   }
 }

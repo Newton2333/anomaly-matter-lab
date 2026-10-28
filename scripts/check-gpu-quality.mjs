@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
-import {framePercentile,nextGpuProfile,gpuProfileChanged,MIN_GPU_QUALITY} from '../src/gpu-quality.js';
+import {framePercentile,nextGpuProfile,gpuProfileChanged,MIN_GPU_QUALITY,calibrationPressure} from '../src/gpu-quality.js';
 
 const full={quality:1,reflections:true,canReflect:true};
 assert.deepEqual(nextGpuProfile(full,16.7),full);
 assert.equal(framePercentile([NaN,0,16,18,17,19]),19);
 assert.equal(framePercentile([16,180,17],.5),17); // One allocation/GC spike is not a steady rate.
+
+// A slow solver cannot be repaired by blurring the image. Only measured render
+// pressure spends the image budget; expensive shading still adapts promptly.
+assert.deepEqual(nextGpuProfile(full,calibrationPressure(35,4)),full);
+assert.deepEqual(nextGpuProfile(full,calibrationPressure(6,8)),full);
+assert.equal(nextGpuProfile(full,calibrationPressure(3,30)).reflections,false);
+assert(nextGpuProfile({...full,reflections:false},calibrationPressure(3,30)).quality<1);
+for(const invalid of [NaN,Infinity,-1])assert.equal(calibrationPressure(invalid,10),0);
+assert.equal(calibrationPressure(5,0),0);
 
 // A saturated renderer first keeps image resolution and drops the extra SSR
 // march; if that is insufficient, repeated observations converge to the floor.

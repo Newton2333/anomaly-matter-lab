@@ -81,6 +81,8 @@ const DEFAULT_APPEARANCE: FluidAppearance = {
 
 export interface FluidSurfaceRendererOptions {
   readonly renderer: WebGPURenderer;
+  /** Optional opaque scene buffers for rendering liquid at an independent resolution. */
+  readonly externalScene?: { readonly color: Any; readonly depth: Any };
   /**
    * Scene the surface is drawn in. Its environment map and its main
    * directional light shade the liquid; both are re-read on each
@@ -281,9 +283,13 @@ export class FluidSurfaceRenderer {
 
     // ---- Surface hit (shared by colour and depth outputs) ----------------
     const viewDirection: Any = positionWorld.sub(cameraPosition).normalize().toVar();
+    const sceneDepthAt = (uv: Any = screenUV): Any => options.externalScene
+      ? options.externalScene.depth.sample(uv) : viewportDepthTexture(uv);
+    const sceneColorAt = (uv: Any): Any => options.externalScene
+      ? options.externalScene.color.sample(uv) : viewportSharedTexture(uv);
     const opaqueDistance: Any = getViewPosition(
       screenUV,
-      viewportDepthTexture().r,
+      sceneDepthAt().r,
       cameraProjectionMatrixInverse,
     )
       .length()
@@ -343,7 +349,7 @@ export class FluidSurfaceRenderer {
         };
         const opaqueAt = (uv: Any): Any =>
           cameraWorldMatrix.mul(
-            vec4(getViewPosition(uv, viewportDepthTexture(uv).r, cameraProjectionMatrixInverse), 1),
+            vec4(getViewPosition(uv, sceneDepthAt(uv).r, cameraProjectionMatrixInverse), 1),
           ).xyz;
         const body: Any = vec3(0).toVar();
         // ANOMALY optimization: a fully metallic surface never transmits light.
@@ -456,7 +462,7 @@ export class FluidSurfaceRenderer {
             bentUV,
             select(occluded(exitUV).not(), exitUV, screenUV),
           );
-          const behind: Any = viewportSharedTexture(refractUV).rgb;
+          const behind: Any = sceneColorAt(refractUV).rgb;
           const depth: Any = optical.div(attenuation);
           const transmittance: Any = tint.pow(vec3(depth));
           // Light scattered back toward the eye travels about half the path, so it
@@ -537,7 +543,7 @@ export class FluidSurfaceRenderer {
           const confidence: Any = found
             .mul(edge.x.mul(edge.y))
             .mul(roughness.mul(-2.5).add(1).clamp(0, 1));
-          reflected.assign(mix(reflected, viewportSharedTexture(hitUV).rgb, confidence));
+          reflected.assign(mix(reflected, sceneColorAt(hitUV).rgb, confidence));
         });
         const l: Any = this.sunDirection;
         const h: Any = l.add(v).normalize();
